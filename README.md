@@ -69,7 +69,7 @@ The fact table containing page view/visit data. Expected columns:
 | fact_durationsum | Total duration |
 | fact_durationavg | Average duration |
 | fact_comments | Number of comments |
-| fact_marketingPageIdliked | Number of likes |
+| fact_marketingPageIdliked | PageID that was liked (presence indicates a like event) |
 
 ### page_inventory.csv
 
@@ -190,6 +190,7 @@ The Jupyter notebook includes:
 ## Key Metrics
 
 - **UV (Unique Visitors)**: `COUNT(DISTINCT viewingcontactid)` - calculated at query time, not pre-aggregated
+- **Likes**: `COUNT` of rows where `marketingpageidliked` is not null/empty (the field contains the PageID that was liked)
 - **Engagement**: `likes + comments`
 - **Engagement Rate**: `(likes + comments) / views * 100`
 
