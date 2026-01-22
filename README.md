@@ -16,8 +16,7 @@ Chatbot/
 │   └── parquet/           # Parquet files for Power BI (auto-generated)
 │       ├── fact.parquet
 │       ├── page_inventory.parquet
-│       ├── dim_date.parquet
-│       └── analytics_combined.parquet
+│       └── dim_date.parquet
 ├── notebooks/
 │   └── analysis.ipynb     # Jupyter notebook for analysis
 ├── scripts/
@@ -197,9 +196,13 @@ Import the Parquet files from `output/parquet/` into Power BI:
 
 1. Open Power BI Desktop
 2. Get Data > Parquet
-3. Select files from `output/parquet/`:
-   - `analytics_combined.parquet` - Denormalized view (recommended for simplicity)
-   - Or use `fact.parquet` + `page_inventory.parquet` separately and join on `marketingpageid`
+3. Import all three files from `output/parquet/`:
+   - `fact.parquet` - Fact table
+   - `page_inventory.parquet` - Page dimension
+   - `dim_date.parquet` - Date dimension
+4. Create relationships (star schema):
+   - `fact.marketingpageid` → `page_inventory.marketingpageid`
+   - `fact.visitdatekey` → `dim_date.datekey`
 
 ## Notebook Analysis Sections
 

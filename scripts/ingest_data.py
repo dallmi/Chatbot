@@ -220,11 +220,14 @@ def export_to_parquet(con: duckdb.DuckDBPyConnection) -> None:
     """
     Export tables to Parquet format for Power BI reporting.
 
-    Creates:
+    Creates a star schema with:
         - fact.parquet: The fact table
         - page_inventory.parquet: The page inventory dimension
         - dim_date.parquet: The date dimension table
-        - analytics_combined.parquet: Denormalized join of fact + page_inventory
+
+    In Power BI, join:
+        - fact.marketingpageid -> page_inventory.marketingpageid
+        - fact.visitdatekey -> dim_date.datekey
 
     Args:
         con: Active DuckDB connection with tables loaded
@@ -246,24 +249,8 @@ def export_to_parquet(con: duckdb.DuckDBPyConnection) -> None:
     con.execute(f"COPY dim_date TO '{date_parquet}' (FORMAT PARQUET, COMPRESSION SNAPPY)")
     print(f"Exported date dimension to: {date_parquet}")
 
-    # Export combined/denormalized view for simpler Power BI reporting
-    combined_parquet = OUTPUT_PARQUET_DIR / "analytics_combined.parquet"
-    con.execute(f"""
-        COPY (
-            SELECT
-                f.*,
-                p.* EXCLUDE (marketingpageid)
-            FROM fact f
-            LEFT JOIN page_inventory p ON f.marketingpageid = p.marketingpageid
-        ) TO '{combined_parquet}' (FORMAT PARQUET, COMPRESSION SNAPPY)
-    """)
-    combined_count = con.execute("""
-        SELECT COUNT(*) FROM fact f
-        LEFT JOIN page_inventory p ON f.marketingpageid = p.marketingpageid
-    """).fetchone()[0]
-    print(f"Exported combined view ({combined_count:,} rows) to: {combined_parquet}")
-
     print(f"\nParquet files saved to: {OUTPUT_PARQUET_DIR}")
+    print("\nNote: Use star schema in Power BI - join fact to page_inventory and dim_date")
 
 
 def validate_primary_keys(con: duckdb.DuckDBPyConnection) -> bool:
