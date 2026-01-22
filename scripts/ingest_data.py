@@ -21,6 +21,7 @@ Project structure:
     scripts/            - This script and other utilities
 """
 
+import os
 import duckdb
 from pathlib import Path
 
@@ -289,7 +290,15 @@ def ingest_data(
         # Create date dimension table
         create_date_dimension(con)
 
-        print(f"\nDatabase saved to: {db_path}")
+        # Optimize database size
+        print("\n--- Optimizing Database ---")
+        con.execute("CHECKPOINT")
+        con.execute("VACUUM")
+
+        # Get database size
+        db_size_mb = os.path.getsize(db_path) / (1024 * 1024)
+        print(f"Database size: {db_size_mb:.1f} MB")
+        print(f"Database saved to: {db_path}")
 
         # Validate primary keys
         validate_primary_keys(con)
