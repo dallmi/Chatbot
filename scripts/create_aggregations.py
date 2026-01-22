@@ -192,7 +192,8 @@ def create_aggregations(
         has_employee = 'employee_contact' in source_tables
 
         if has_employee:
-            # Create fact_daily_employee: Daily metrics by employee attributes
+            # Create fact_daily_employee: Daily metrics by employee attributes + website
+            # Includes websitename to enable slice-and-dice by website, date, region, division
             print("\n--- Creating fact_daily_employee ---")
             con.execute("""
                 CREATE TABLE fact_daily_employee AS
@@ -209,6 +210,7 @@ def create_aggregations(
                     d.day_of_week,
                     d.day_name,
                     d.is_weekend,
+                    COALESCE(p.websitename, 'Unknown') AS websitename,
                     COALESCE(e.employeebusinessdivision, 'Unknown') AS employeebusinessdivision,
                     COALESCE(e.employeecategory, 'Unknown') AS employeecategory,
                     COALESCE(e.employeefunction, 'Unknown') AS employeefunction,
@@ -227,11 +229,13 @@ def create_aggregations(
                     COUNT(*) AS row_count
                 FROM source.fact f
                 JOIN source.dim_date d ON f.visitdatekey = d.datekey
+                LEFT JOIN source.page_inventory p ON f.marketingpageid = p.marketingpageid
                 LEFT JOIN source.employee_contact e ON f.viewingcontactid = e.contactid
                 GROUP BY
                     d.datekey, d.date, d.year, d.quarter, d.month, d.month_name,
                     d.year_month, d.week_number, d.year_week, d.day_of_week,
                     d.day_name, d.is_weekend,
+                    COALESCE(p.websitename, 'Unknown'),
                     COALESCE(e.employeebusinessdivision, 'Unknown'),
                     COALESCE(e.employeecategory, 'Unknown'),
                     COALESCE(e.employeefunction, 'Unknown'),
