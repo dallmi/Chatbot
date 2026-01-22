@@ -7,8 +7,10 @@ Reads from the detailed DuckDB and outputs to a separate aggregated DuckDB and P
 Aggregation tables:
     - fact_daily: Daily metrics per page (UV, views, likes, comments)
     - fact_daily_website: Daily metrics per website
-    - fact_daily_employee: Daily metrics by employee attributes (division, country, etc.)
     - fact_monthly: Monthly metrics per page
+
+Note: Employee analysis requires the detailed database for accurate UV calculations
+across arbitrary date ranges.
 
 Output:
     - output/db/analytics_agg.duckdb - Aggregated database
@@ -190,53 +192,6 @@ def create_aggregations(
         # Check if employee_contact table exists in source
         source_tables = [t[0] for t in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'source'").fetchall()]
         has_employee = 'employee_contact' in source_tables
-
-        if has_employee:
-            # Create fact_daily_employee: Daily metrics by website + key employee attributes
-            # Grain: Date + Website + Region + Division (compact, for common use cases)
-            # For page-level employee analysis, use the detailed database
-            print("\n--- Creating fact_daily_employee ---")
-            con.execute("""
-                CREATE TABLE fact_daily_employee AS
-                SELECT
-                    d.datekey,
-                    d.date,
-                    d.year,
-                    d.quarter,
-                    d.month,
-                    d.month_name,
-                    d.year_month,
-                    d.week_number,
-                    d.year_week,
-                    d.day_of_week,
-                    d.day_name,
-                    d.is_weekend,
-                    COALESCE(p.websitename, 'Unknown') AS websitename,
-                    COALESCE(e.employeeregion, 'Unknown') AS employeeregion,
-                    COALESCE(e.employeebusinessdivision, 'Unknown') AS employeebusinessdivision,
-                    COUNT(DISTINCT f.viewingcontactid) AS unique_visitors,
-                    SUM(f.views) AS views,
-                    SUM(f.visits) AS visits,
-                    SUM(CASE WHEN f.marketingpageidliked IS NOT NULL AND f.marketingpageidliked != '' THEN 1 ELSE 0 END) AS likes,
-                    SUM(f.comments) AS comments,
-                    SUM(CASE WHEN f.marketingpageidliked IS NOT NULL AND f.marketingpageidliked != '' THEN 1 ELSE 0 END) + SUM(f.comments) AS engagements,
-                    SUM(f.durationsum) AS durationsum,
-                    COUNT(DISTINCT f.marketingpageid) AS pages_viewed,
-                    COUNT(*) AS row_count
-                FROM source.fact f
-                JOIN source.dim_date d ON f.visitdatekey = d.datekey
-                LEFT JOIN source.page_inventory p ON f.marketingpageid = p.marketingpageid
-                LEFT JOIN source.employee_contact e ON f.viewingcontactid = e.contactid
-                GROUP BY
-                    d.datekey, d.date, d.year, d.quarter, d.month, d.month_name,
-                    d.year_month, d.week_number, d.year_week, d.day_of_week,
-                    d.day_name, d.is_weekend,
-                    COALESCE(p.websitename, 'Unknown'),
-                    COALESCE(e.employeeregion, 'Unknown'),
-                    COALESCE(e.employeebusinessdivision, 'Unknown')
-            """)
-            count = con.execute("SELECT COUNT(*) FROM fact_daily_employee").fetchone()[0]
-            print(f"  Created {count:,} rows")
 
         # Copy dim_date for reference
         print("\n--- Copying dim_date ---")
