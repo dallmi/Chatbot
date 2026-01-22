@@ -12,15 +12,24 @@ Chatbot/
 │   └── page_inventory.csv # Page inventory (you provide this)
 ├── output/
 │   ├── db/                # DuckDB database files (auto-generated)
-│   │   └── analytics.duckdb
-│   └── parquet/           # Parquet files for Power BI (auto-generated)
-│       ├── fact.parquet
-│       ├── page_inventory.parquet
-│       └── dim_date.parquet
+│   │   ├── analytics.duckdb      # Detailed data (large)
+│   │   └── analytics_agg.duckdb  # Aggregated data (small)
+│   ├── parquet/           # Detailed Parquet files
+│   │   ├── fact.parquet
+│   │   ├── page_inventory.parquet
+│   │   └── dim_date.parquet
+│   └── parquet_agg/       # Aggregated Parquet for Power BI (recommended)
+│       ├── fact_daily.parquet
+│       ├── fact_daily_website.parquet
+│       ├── fact_monthly.parquet
+│       ├── dim_date.parquet
+│       └── page_inventory.parquet
 ├── notebooks/
-│   └── analysis.ipynb     # Jupyter notebook for analysis
+│   ├── analysis.ipynb     # Detailed data analysis
+│   └── analysis_agg.ipynb # Aggregated data analysis
 ├── scripts/
-│   └── ingest_data.py     # Data ingestion script
+│   ├── ingest_data.py     # Data ingestion script
+│   └── create_aggregations.py  # Aggregation script
 ├── reporting/             # For exported reports (CSV, Excel, PDF)
 ├── config/                # Configuration files (if needed)
 ├── requirements.txt       # Python dependencies
@@ -167,18 +176,44 @@ This is useful when your source exports a rolling 90-day window - historical dat
 - Creates `output/parquet/*.parquet` - Parquet files for Power BI
 - Validates primary keys and reports any issues
 
-### Step 2: Analyze Data in Jupyter
+### Step 1b: Create Aggregations (Recommended for Power BI)
 
-Start Jupyter and open the analysis notebook:
+The detailed fact table can be large (1GB+ for 90 days). For Power BI reporting, create pre-aggregated tables:
 
 ```bash
+python scripts/create_aggregations.py
+```
+
+This reads from the detailed database and creates:
+- `output/db/analytics_agg.duckdb` - Aggregated database (~50MB)
+- `output/parquet_agg/*.parquet` - Aggregated Parquet files (~5MB total)
+
+**Aggregation tables:**
+
+| Table | Grain | Description |
+|-------|-------|-------------|
+| `fact_daily` | Date + Page | Daily metrics per page (UV, views, likes, etc.) |
+| `fact_daily_website` | Date + Website | Daily metrics per website |
+| `fact_monthly` | Month + Page | Monthly metrics per page |
+
+**Note:** UV in aggregated tables is pre-calculated at the grain level. For true cross-period UV (e.g., monthly UV for a website), use the detailed database.
+
+### Step 2: Analyze Data in Jupyter
+
+Start Jupyter and open an analysis notebook:
+
+```bash
+# Detailed data analysis (large dataset)
 jupyter notebook notebooks/analysis.ipynb
+
+# Aggregated data analysis (faster, smaller)
+jupyter notebook notebooks/analysis_agg.ipynb
 ```
 
 Or using JupyterLab:
 
 ```bash
-jupyter lab notebooks/analysis.ipynb
+jupyter lab notebooks/
 ```
 
 ### Step 3: Configure Filters (Optional)
@@ -201,15 +236,24 @@ Then run all cells to see filtered results.
 
 ### Step 4: Use Parquet Files in Power BI
 
-Import the Parquet files from `output/parquet/` into Power BI:
+**Recommended: Use aggregated files** from `output/parquet_agg/` (much smaller, faster):
 
 1. Open Power BI Desktop
 2. Get Data > Parquet
-3. Import all three files from `output/parquet/`:
-   - `fact.parquet` - Fact table
+3. Import files from `output/parquet_agg/`:
+   - `fact_daily.parquet` or `fact_daily_website.parquet` - Pre-aggregated metrics
+   - `fact_monthly.parquet` - Monthly aggregates
    - `page_inventory.parquet` - Page dimension
    - `dim_date.parquet` - Date dimension
-4. Create relationships (star schema):
+4. Create relationships as needed (date fields are already included in aggregates)
+
+**Alternative: Use detailed files** from `output/parquet/` (large, row-level detail):
+
+1. Import from `output/parquet/`:
+   - `fact.parquet` - Detailed fact table (can be 300MB+)
+   - `page_inventory.parquet` - Page dimension
+   - `dim_date.parquet` - Date dimension
+2. Create relationships (star schema):
    - `fact.marketingpageid` → `page_inventory.marketingpageid`
    - `fact.visitdatekey` → `dim_date.datekey`
 

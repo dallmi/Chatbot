@@ -8,6 +8,7 @@ output/db/*.duckdb.wal
 
 # Parquet files (Power BI data)
 output/parquet/*.parquet
+output/parquet_agg/*.parquet
 
 # Reporting outputs
 reporting/*.csv
