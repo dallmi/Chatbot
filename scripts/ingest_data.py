@@ -89,7 +89,7 @@ def ingest_data(
                 owningbusinessunit,
                 pagename,
                 fullpageurl,
-                sourcesytempageid AS sourcesystempageid,
+                sourcesystempageid,
                 marketingpageid,
                 theme,
                 topic,

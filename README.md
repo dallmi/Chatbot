@@ -82,7 +82,7 @@ The page inventory/dimension table. Expected columns:
 | owningbusinessunit | Owning business unit |
 | pagename | Page name |
 | fullpageurl | Full page URL |
-| sourcesytempageid | Source system page ID |
+| sourcesystempageid | Source system page ID |
 | marketingpageid | Marketing page ID (primary key, join key to fact) |
 | theme | Page theme |
 | topic | Page topic |
