@@ -192,8 +192,9 @@ def create_aggregations(
         has_employee = 'employee_contact' in source_tables
 
         if has_employee:
-            # Create fact_daily_employee: Daily metrics by page + employee attributes
-            # Includes fullpageurl to enable slice-and-dice by page URL, website, date, region, division
+            # Create fact_daily_employee: Daily metrics by website + key employee attributes
+            # Grain: Date + Website + Region + Division (compact, for common use cases)
+            # For page-level employee analysis, use the detailed database
             print("\n--- Creating fact_daily_employee ---")
             con.execute("""
                 CREATE TABLE fact_daily_employee AS
@@ -210,17 +211,9 @@ def create_aggregations(
                     d.day_of_week,
                     d.day_name,
                     d.is_weekend,
-                    f.marketingpageid,
-                    COALESCE(p.pagename, 'Unknown') AS pagename,
                     COALESCE(p.websitename, 'Unknown') AS websitename,
-                    COALESCE(p.fullpageurl, 'Unknown') AS fullpageurl,
-                    COALESCE(e.employeebusinessdivision, 'Unknown') AS employeebusinessdivision,
-                    COALESCE(e.employeecategory, 'Unknown') AS employeecategory,
-                    COALESCE(e.employeefunction, 'Unknown') AS employeefunction,
-                    COALESCE(e.employeegcrscountry, 'Unknown') AS employeegcrscountry,
                     COALESCE(e.employeeregion, 'Unknown') AS employeeregion,
-                    COALESCE(e.employeeworkcountry, 'Unknown') AS employeeworkcountry,
-                    COALESCE(e.employeerank, 'Unknown') AS employeerank,
+                    COALESCE(e.employeebusinessdivision, 'Unknown') AS employeebusinessdivision,
                     COUNT(DISTINCT f.viewingcontactid) AS unique_visitors,
                     SUM(f.views) AS views,
                     SUM(f.visits) AS visits,
@@ -228,6 +221,7 @@ def create_aggregations(
                     SUM(f.comments) AS comments,
                     SUM(CASE WHEN f.marketingpageidliked IS NOT NULL AND f.marketingpageidliked != '' THEN 1 ELSE 0 END) + SUM(f.comments) AS engagements,
                     SUM(f.durationsum) AS durationsum,
+                    COUNT(DISTINCT f.marketingpageid) AS pages_viewed,
                     COUNT(*) AS row_count
                 FROM source.fact f
                 JOIN source.dim_date d ON f.visitdatekey = d.datekey
@@ -237,17 +231,9 @@ def create_aggregations(
                     d.datekey, d.date, d.year, d.quarter, d.month, d.month_name,
                     d.year_month, d.week_number, d.year_week, d.day_of_week,
                     d.day_name, d.is_weekend,
-                    f.marketingpageid,
-                    COALESCE(p.pagename, 'Unknown'),
                     COALESCE(p.websitename, 'Unknown'),
-                    COALESCE(p.fullpageurl, 'Unknown'),
-                    COALESCE(e.employeebusinessdivision, 'Unknown'),
-                    COALESCE(e.employeecategory, 'Unknown'),
-                    COALESCE(e.employeefunction, 'Unknown'),
-                    COALESCE(e.employeegcrscountry, 'Unknown'),
                     COALESCE(e.employeeregion, 'Unknown'),
-                    COALESCE(e.employeeworkcountry, 'Unknown'),
-                    COALESCE(e.employeerank, 'Unknown')
+                    COALESCE(e.employeebusinessdivision, 'Unknown')
             """)
             count = con.execute("SELECT COUNT(*) FROM fact_daily_employee").fetchone()[0]
             print(f"  Created {count:,} rows")

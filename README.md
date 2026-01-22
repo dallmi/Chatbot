@@ -222,7 +222,7 @@ This reads from the detailed database and creates:
 |-------|-------|-------------|
 | `fact_daily` | Date + Page | Daily metrics per page (UV, views, likes, etc.) |
 | `fact_daily_website` | Date + Website | Daily metrics per website |
-| `fact_daily_employee` | Date + Page + Employee Attributes | Daily metrics by page and employee attributes - enables UV by region/division filtered by website, page URL, or date range (if employee_contact.csv provided) |
+| `fact_daily_employee` | Date + Website + Region + Division | Daily metrics by website and key employee attributes (compact). For page-level employee analysis, use the detailed database. |
 | `fact_monthly` | Month + Page | Monthly metrics per page |
 
 **Note:** UV in aggregated tables is pre-calculated at the grain level. For true cross-period UV (e.g., monthly UV for a website), use the detailed database.
