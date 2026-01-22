@@ -7,6 +7,7 @@ Reads from the detailed DuckDB and outputs to a separate aggregated DuckDB and P
 Aggregation tables:
     - fact_daily: Daily metrics per page (UV, views, likes, comments)
     - fact_daily_website: Daily metrics per website
+    - fact_daily_employee: Daily metrics by employee attributes (division, country, etc.)
     - fact_monthly: Monthly metrics per page
 
 Output:
@@ -186,6 +187,62 @@ def create_aggregations(
         count = con.execute("SELECT COUNT(*) FROM fact_monthly").fetchone()[0]
         print(f"  Created {count:,} rows")
 
+        # Check if employee_contact table exists in source
+        source_tables = [t[0] for t in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'source'").fetchall()]
+        has_employee = 'employee_contact' in source_tables
+
+        if has_employee:
+            # Create fact_daily_employee: Daily metrics by employee attributes
+            print("\n--- Creating fact_daily_employee ---")
+            con.execute("""
+                CREATE TABLE fact_daily_employee AS
+                SELECT
+                    d.datekey,
+                    d.date,
+                    d.year,
+                    d.quarter,
+                    d.month,
+                    d.month_name,
+                    d.year_month,
+                    d.week_number,
+                    d.year_week,
+                    d.day_of_week,
+                    d.day_name,
+                    d.is_weekend,
+                    COALESCE(e.employeebusinessdivision, 'Unknown') AS employeebusinessdivision,
+                    COALESCE(e.employeecategory, 'Unknown') AS employeecategory,
+                    COALESCE(e.employeefunction, 'Unknown') AS employeefunction,
+                    COALESCE(e.employeegcrscountry, 'Unknown') AS employeegcrscountry,
+                    COALESCE(e.employeeregion, 'Unknown') AS employeeregion,
+                    COALESCE(e.employeeworkcountry, 'Unknown') AS employeeworkcountry,
+                    COALESCE(e.employeerank, 'Unknown') AS employeerank,
+                    COUNT(DISTINCT f.viewingcontactid) AS unique_visitors,
+                    SUM(f.views) AS views,
+                    SUM(f.visits) AS visits,
+                    SUM(CASE WHEN f.marketingpageidliked IS NOT NULL AND f.marketingpageidliked != '' THEN 1 ELSE 0 END) AS likes,
+                    SUM(f.comments) AS comments,
+                    SUM(CASE WHEN f.marketingpageidliked IS NOT NULL AND f.marketingpageidliked != '' THEN 1 ELSE 0 END) + SUM(f.comments) AS engagements,
+                    SUM(f.durationsum) AS durationsum,
+                    COUNT(DISTINCT f.marketingpageid) AS pages_viewed,
+                    COUNT(*) AS row_count
+                FROM source.fact f
+                JOIN source.dim_date d ON f.visitdatekey = d.datekey
+                LEFT JOIN source.employee_contact e ON f.viewingcontactid = e.contactid
+                GROUP BY
+                    d.datekey, d.date, d.year, d.quarter, d.month, d.month_name,
+                    d.year_month, d.week_number, d.year_week, d.day_of_week,
+                    d.day_name, d.is_weekend,
+                    COALESCE(e.employeebusinessdivision, 'Unknown'),
+                    COALESCE(e.employeecategory, 'Unknown'),
+                    COALESCE(e.employeefunction, 'Unknown'),
+                    COALESCE(e.employeegcrscountry, 'Unknown'),
+                    COALESCE(e.employeeregion, 'Unknown'),
+                    COALESCE(e.employeeworkcountry, 'Unknown'),
+                    COALESCE(e.employeerank, 'Unknown')
+            """)
+            count = con.execute("SELECT COUNT(*) FROM fact_daily_employee").fetchone()[0]
+            print(f"  Created {count:,} rows")
+
         # Copy dim_date for reference
         print("\n--- Copying dim_date ---")
         con.execute("CREATE TABLE dim_date AS SELECT * FROM source.dim_date")
@@ -197,6 +254,13 @@ def create_aggregations(
         con.execute("CREATE TABLE page_inventory AS SELECT * FROM source.page_inventory")
         count = con.execute("SELECT COUNT(*) FROM page_inventory").fetchone()[0]
         print(f"  Copied {count:,} rows")
+
+        # Copy employee_contact for reference (if exists)
+        if has_employee:
+            print("\n--- Copying employee_contact ---")
+            con.execute("CREATE TABLE employee_contact AS SELECT * FROM source.employee_contact")
+            count = con.execute("SELECT COUNT(*) FROM employee_contact").fetchone()[0]
+            print(f"  Copied {count:,} rows")
 
         # Detach source
         con.execute("DETACH source")
@@ -221,9 +285,11 @@ def export_aggregations_to_parquet(con: duckdb.DuckDBPyConnection) -> None:
     """Export aggregated tables to Parquet format."""
     print("\n--- Exporting Aggregations to Parquet ---")
 
-    tables = ['fact_daily', 'fact_daily_website', 'fact_monthly', 'dim_date', 'page_inventory']
+    # Get all tables in the database
+    all_tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
 
-    for table in tables:
+    # Export each table
+    for table in all_tables:
         parquet_path = OUTPUT_PARQUET_AGG_DIR / f"{table}.parquet"
         con.execute(f"COPY {table} TO '{parquet_path}' (FORMAT PARQUET, COMPRESSION SNAPPY)")
         size_mb = os.path.getsize(parquet_path) / (1024 * 1024)

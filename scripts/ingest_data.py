@@ -1,13 +1,14 @@
 """
 Intranet Analytics Data Ingestion Script
 
-This script loads the fact table and page inventory CSV files into a DuckDB database
-and exports them to Parquet format for Power BI reporting.
+This script loads the fact table, page inventory, and employee contact CSV files
+into a DuckDB database and exports them to Parquet format for Power BI reporting.
 
 Features:
 - Incremental loading (default): Retains historical data beyond the source's rolling window
   - Fact table: Keeps data outside CSV date range, replaces overlapping dates
   - Page inventory: Upserts based on marketingpageid
+  - Employee contact: Upserts based on contactid
 - Full refresh mode (--full-refresh): Replaces all data
 
 The fact table columns are cleaned by removing the 'fact_' prefix.
@@ -34,27 +35,31 @@ OUTPUT_PARQUET_DIR = PROJECT_ROOT / "output" / "parquet"
 DEFAULT_DB_PATH = OUTPUT_DB_DIR / "analytics.duckdb"
 DEFAULT_FACT_PATH = INPUT_DIR / "fact.csv"
 DEFAULT_INVENTORY_PATH = INPUT_DIR / "page_inventory.csv"
+DEFAULT_EMPLOYEE_PATH = INPUT_DIR / "employee_contact.csv"
 
 
 def ingest_data(
     fact_csv_path: str | Path,
     page_inventory_csv_path: str | Path,
+    employee_contact_csv_path: str | Path = DEFAULT_EMPLOYEE_PATH,
     db_path: str | Path = DEFAULT_DB_PATH,
     export_parquet: bool = True,
     full_refresh: bool = False
 ) -> None:
     """
-    Ingest fact table and page inventory CSVs into DuckDB.
+    Ingest fact table, page inventory, and employee contact CSVs into DuckDB.
 
     By default, uses incremental loading:
     - Fact table: Keeps historical data outside the CSV date range, replaces overlapping dates
-    - Page inventory: Upserts based on marketingpageid (updates existing, adds new, keeps historical)
+    - Page inventory: Upserts based on marketingpageid
+    - Employee contact: Upserts based on contactid (updates existing, adds new, keeps historical)
 
     Use full_refresh=True to replace all data (original behavior).
 
     Args:
         fact_csv_path: Path to the fact table CSV file
         page_inventory_csv_path: Path to the page inventory CSV file
+        employee_contact_csv_path: Path to the employee contact CSV file
         db_path: Path for the DuckDB database file
         export_parquet: Whether to export tables to Parquet format
         full_refresh: If True, replace all data; if False, use incremental merge
@@ -62,6 +67,7 @@ def ingest_data(
     # Ensure paths are absolute
     fact_csv_path = Path(fact_csv_path).resolve()
     page_inventory_csv_path = Path(page_inventory_csv_path).resolve()
+    employee_contact_csv_path = Path(employee_contact_csv_path).resolve()
     db_path = Path(db_path).resolve()
 
     # Ensure output directories exist
@@ -276,6 +282,109 @@ def ingest_data(
         inventory_count = con.execute("SELECT COUNT(*) FROM page_inventory").fetchone()[0]
         print(f"  Total rows in 'page_inventory' table: {inventory_count:,}")
 
+        # Ingest employee contact dimension (if file exists)
+        if employee_contact_csv_path.exists():
+            print(f"\nLoading employee contact from: {employee_contact_csv_path}")
+
+            if full_refresh:
+                # Full refresh: replace all data
+                print("  Mode: FULL REFRESH (replacing all data)")
+                con.execute(f"""
+                    CREATE OR REPLACE TABLE employee_contact AS
+                    SELECT
+                        contactId AS contactid,
+                        employeebusinessdivision,
+                        employeeCategory AS employeecategory,
+                        employeeClass AS employeeclass,
+                        employeeCluster AS employeecluster,
+                        employeeFamily AS employeefamily,
+                        employeeFunction AS employeefunction,
+                        employeeGCRSCountry AS employeegcrscountry,
+                        employeeRank AS employeerank,
+                        employeeregion,
+                        employeeRole AS employeerole,
+                        employeeWorkCountry AS employeeworkcountry,
+                        OU_LVL_1 AS ou_lvl_1,
+                        OU_LVL_2 AS ou_lvl_2,
+                        OU_LVL_3 AS ou_lvl_3,
+                        OU_LVL_4 AS ou_lvl_4,
+                        OU_LVL_5 AS ou_lvl_5
+                    FROM read_csv('{employee_contact_csv_path}', auto_detect=true)
+                """)
+            else:
+                # Incremental: upsert based on contactid
+                print("  Mode: INCREMENTAL (upsert by contactid)")
+
+                # Create table if it doesn't exist
+                con.execute("""
+                    CREATE TABLE IF NOT EXISTS employee_contact (
+                        contactid VARCHAR,
+                        employeebusinessdivision VARCHAR,
+                        employeecategory VARCHAR,
+                        employeeclass VARCHAR,
+                        employeecluster VARCHAR,
+                        employeefamily VARCHAR,
+                        employeefunction VARCHAR,
+                        employeegcrscountry VARCHAR,
+                        employeerank VARCHAR,
+                        employeeregion VARCHAR,
+                        employeerole VARCHAR,
+                        employeeworkcountry VARCHAR,
+                        ou_lvl_1 VARCHAR,
+                        ou_lvl_2 VARCHAR,
+                        ou_lvl_3 VARCHAR,
+                        ou_lvl_4 VARCHAR,
+                        ou_lvl_5 VARCHAR
+                    )
+                """)
+
+                # Load CSV into staging table
+                con.execute(f"""
+                    CREATE OR REPLACE TEMP TABLE employee_contact_staging AS
+                    SELECT
+                        contactId AS contactid,
+                        employeebusinessdivision,
+                        employeeCategory AS employeecategory,
+                        employeeClass AS employeeclass,
+                        employeeCluster AS employeecluster,
+                        employeeFamily AS employeefamily,
+                        employeeFunction AS employeefunction,
+                        employeeGCRSCountry AS employeegcrscountry,
+                        employeeRank AS employeerank,
+                        employeeregion,
+                        employeeRole AS employeerole,
+                        employeeWorkCountry AS employeeworkcountry,
+                        OU_LVL_1 AS ou_lvl_1,
+                        OU_LVL_2 AS ou_lvl_2,
+                        OU_LVL_3 AS ou_lvl_3,
+                        OU_LVL_4 AS ou_lvl_4,
+                        OU_LVL_5 AS ou_lvl_5
+                    FROM read_csv('{employee_contact_csv_path}', auto_detect=true)
+                """)
+
+                # Count rows before
+                before_count = con.execute("SELECT COUNT(*) FROM employee_contact").fetchone()[0]
+                staging_count = con.execute("SELECT COUNT(*) FROM employee_contact_staging").fetchone()[0]
+
+                # Delete contacts that exist in staging (will be re-inserted with fresh values)
+                con.execute("""
+                    DELETE FROM employee_contact
+                    WHERE contactid IN (SELECT contactid FROM employee_contact_staging)
+                """)
+
+                # Insert all from staging
+                con.execute("INSERT INTO employee_contact SELECT * FROM employee_contact_staging")
+
+                # Drop staging table
+                con.execute("DROP TABLE employee_contact_staging")
+
+                print(f"  Rows before: {before_count:,}, CSV rows: {staging_count:,}")
+
+            employee_count = con.execute("SELECT COUNT(*) FROM employee_contact").fetchone()[0]
+            print(f"  Total rows in 'employee_contact' table: {employee_count:,}")
+        else:
+            print(f"\nSkipping employee contact (file not found): {employee_contact_csv_path}")
+
         # Show schema info
         print("\n--- Fact Table Schema ---")
         schema = con.execute("DESCRIBE fact").fetchall()
@@ -286,6 +395,14 @@ def ingest_data(
         schema = con.execute("DESCRIBE page_inventory").fetchall()
         for col in schema:
             print(f"  {col[0]}: {col[1]}")
+
+        # Show employee_contact schema if table exists
+        tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
+        if 'employee_contact' in tables:
+            print("\n--- Employee Contact Schema ---")
+            schema = con.execute("DESCRIBE employee_contact").fetchall()
+            for col in schema:
+                print(f"  {col[0]}: {col[1]}")
 
         # Create date dimension table
         create_date_dimension(con)
@@ -395,10 +512,12 @@ def export_to_parquet(con: duckdb.DuckDBPyConnection) -> None:
     Creates a star schema with:
         - fact.parquet: The fact table
         - page_inventory.parquet: The page inventory dimension
+        - employee_contact.parquet: The employee contact dimension (if exists)
         - dim_date.parquet: The date dimension table
 
     In Power BI, join:
         - fact.marketingpageid -> page_inventory.marketingpageid
+        - fact.viewingcontactid -> employee_contact.contactid
         - fact.visitdatekey -> dim_date.datekey
 
     Args:
@@ -416,13 +535,20 @@ def export_to_parquet(con: duckdb.DuckDBPyConnection) -> None:
     con.execute(f"COPY page_inventory TO '{inventory_parquet}' (FORMAT PARQUET, COMPRESSION SNAPPY)")
     print(f"Exported page inventory to: {inventory_parquet}")
 
+    # Export employee contact (if table exists)
+    tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
+    if 'employee_contact' in tables:
+        employee_parquet = OUTPUT_PARQUET_DIR / "employee_contact.parquet"
+        con.execute(f"COPY employee_contact TO '{employee_parquet}' (FORMAT PARQUET, COMPRESSION SNAPPY)")
+        print(f"Exported employee contact to: {employee_parquet}")
+
     # Export date dimension
     date_parquet = OUTPUT_PARQUET_DIR / "dim_date.parquet"
     con.execute(f"COPY dim_date TO '{date_parquet}' (FORMAT PARQUET, COMPRESSION SNAPPY)")
     print(f"Exported date dimension to: {date_parquet}")
 
     print(f"\nParquet files saved to: {OUTPUT_PARQUET_DIR}")
-    print("\nNote: Use star schema in Power BI - join fact to page_inventory and dim_date")
+    print("\nNote: Use star schema in Power BI - join fact to dimensions")
 
 
 def validate_primary_keys(con: duckdb.DuckDBPyConnection) -> bool:
@@ -539,6 +665,7 @@ Example usage:
 Incremental mode (default):
   - Fact table: Keeps historical data, replaces dates within CSV range
   - Page inventory: Updates existing pages, adds new, keeps historical
+  - Employee contact: Updates existing contacts, adds new, keeps historical
 
 Full refresh mode (--full-refresh):
   - Replaces all data with CSV contents
@@ -546,6 +673,7 @@ Full refresh mode (--full-refresh):
 Default paths:
   Fact CSV:          {DEFAULT_FACT_PATH}
   Page inventory:    {DEFAULT_INVENTORY_PATH}
+  Employee contact:  {DEFAULT_EMPLOYEE_PATH}
   Output database:   {DEFAULT_DB_PATH}
   Output parquet:    {OUTPUT_PARQUET_DIR}
         """
@@ -559,6 +687,11 @@ Default paths:
         "--inventory",
         default=str(DEFAULT_INVENTORY_PATH),
         help=f"Path to page inventory CSV file (default: {DEFAULT_INVENTORY_PATH})"
+    )
+    parser.add_argument(
+        "--employee",
+        default=str(DEFAULT_EMPLOYEE_PATH),
+        help=f"Path to employee contact CSV file (default: {DEFAULT_EMPLOYEE_PATH})"
     )
     parser.add_argument(
         "--db",
@@ -581,6 +714,7 @@ Default paths:
     ingest_data(
         args.fact,
         args.inventory,
+        args.employee,
         args.db,
         export_parquet=not args.no_parquet,
         full_refresh=args.full_refresh

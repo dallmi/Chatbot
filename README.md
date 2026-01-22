@@ -9,7 +9,8 @@ Chatbot/
 ├── input/                  # Place your CSV source files here
 │   ├── .gitkeep
 │   ├── fact.csv           # Fact table (you provide this)
-│   └── page_inventory.csv # Page inventory (you provide this)
+│   ├── page_inventory.csv # Page inventory (you provide this)
+│   └── employee_contact.csv # Employee dimension (optional)
 ├── output/
 │   ├── db/                # DuckDB database files (auto-generated)
 │   │   ├── analytics.duckdb      # Detailed data (large)
@@ -17,13 +18,16 @@ Chatbot/
 │   ├── parquet/           # Detailed Parquet files
 │   │   ├── fact.parquet
 │   │   ├── page_inventory.parquet
+│   │   ├── employee_contact.parquet  # If employee_contact.csv provided
 │   │   └── dim_date.parquet
 │   └── parquet_agg/       # Aggregated Parquet for Power BI (recommended)
 │       ├── fact_daily.parquet
 │       ├── fact_daily_website.parquet
+│       ├── fact_daily_employee.parquet  # If employee_contact.csv provided
 │       ├── fact_monthly.parquet
 │       ├── dim_date.parquet
-│       └── page_inventory.parquet
+│       ├── page_inventory.parquet
+│       └── employee_contact.parquet  # If employee_contact.csv provided
 ├── notebooks/
 │   ├── analysis.ipynb     # Detailed data analysis
 │   └── analysis_agg.ipynb # Aggregated data analysis
@@ -107,6 +111,30 @@ The page inventory/dimension table. Expected columns:
 | targetRegion | Target region |
 | targetOrganization | Target organization |
 | cnt | Count |
+
+### employee_contact.csv (Optional)
+
+The employee contact dimension table for analyzing by employee attributes. Expected columns:
+
+| Column | Description |
+|--------|-------------|
+| contactId | Contact ID (primary key, join key to fact.viewingcontactid) |
+| employeebusinessdivision | Business division |
+| employeeCategory | Employee category |
+| employeeClass | Employee class |
+| employeeCluster | Employee cluster |
+| employeeFamily | Employee family |
+| employeeFunction | Employee function |
+| employeeGCRSCountry | GCRS country |
+| employeeRank | Employee rank |
+| employeeregion | Employee region |
+| employeeRole | Employee role |
+| employeeWorkCountry | Work country |
+| OU_LVL_1 | Organizational unit level 1 |
+| OU_LVL_2 | Organizational unit level 2 |
+| OU_LVL_3 | Organizational unit level 3 |
+| OU_LVL_4 | Organizational unit level 4 |
+| OU_LVL_5 | Organizational unit level 5 |
 
 ### dim_date (Auto-generated)
 
@@ -194,6 +222,7 @@ This reads from the detailed database and creates:
 |-------|-------|-------------|
 | `fact_daily` | Date + Page | Daily metrics per page (UV, views, likes, etc.) |
 | `fact_daily_website` | Date + Website | Daily metrics per website |
+| `fact_daily_employee` | Date + Employee Attributes | Daily metrics by employee attributes (if employee_contact.csv provided) |
 | `fact_monthly` | Month + Page | Monthly metrics per page |
 
 **Note:** UV in aggregated tables is pre-calculated at the grain level. For true cross-period UV (e.g., monthly UV for a website), use the detailed database.
