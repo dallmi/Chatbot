@@ -25,6 +25,8 @@ INPUT_DIR = PROJECT_ROOT / "input"
 OUTPUT_DB_DIR = PROJECT_ROOT / "output" / "db"
 OUTPUT_PARQUET_DIR = PROJECT_ROOT / "output" / "parquet"
 DEFAULT_DB_PATH = OUTPUT_DB_DIR / "analytics.duckdb"
+DEFAULT_FACT_PATH = INPUT_DIR / "fact.csv"
+DEFAULT_INVENTORY_PATH = INPUT_DIR / "page_inventory.csv"
 
 
 def ingest_data(
@@ -285,23 +287,25 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Example usage:
-  python ingest_data.py --fact ../input/fact.csv --inventory ../input/page_inventory.csv
+  python ingest_data.py                    # Uses default paths
+  python ingest_data.py --fact custom.csv  # Override fact file path
 
 Default paths:
-  Input directory:   {INPUT_DIR}
+  Fact CSV:          {DEFAULT_FACT_PATH}
+  Page inventory:    {DEFAULT_INVENTORY_PATH}
   Output database:   {DEFAULT_DB_PATH}
   Output parquet:    {OUTPUT_PARQUET_DIR}
         """
     )
     parser.add_argument(
         "--fact",
-        required=True,
-        help="Path to fact table CSV file"
+        default=str(DEFAULT_FACT_PATH),
+        help=f"Path to fact table CSV file (default: {DEFAULT_FACT_PATH})"
     )
     parser.add_argument(
         "--inventory",
-        required=True,
-        help="Path to page inventory CSV file"
+        default=str(DEFAULT_INVENTORY_PATH),
+        help=f"Path to page inventory CSV file (default: {DEFAULT_INVENTORY_PATH})"
     )
     parser.add_argument(
         "--db",

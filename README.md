@@ -106,22 +106,19 @@ The page inventory/dimension table. Expected columns:
 Run the ingestion script to load CSVs into DuckDB and export to Parquet:
 
 ```bash
-cd scripts
-python ingest_data.py --fact ../input/fact.csv --inventory ../input/page_inventory.csv
+python scripts/ingest_data.py
 ```
 
-Or from the project root:
-
-```bash
-python scripts/ingest_data.py --fact input/fact.csv --inventory input/page_inventory.csv
-```
+This uses the default paths:
+- `input/fact.csv`
+- `input/page_inventory.csv`
 
 **Options:**
 
 | Flag | Description |
 |------|-------------|
-| `--fact` | Path to fact table CSV (required) |
-| `--inventory` | Path to page inventory CSV (required) |
+| `--fact` | Path to fact table CSV (default: `input/fact.csv`) |
+| `--inventory` | Path to page inventory CSV (default: `input/page_inventory.csv`) |
 | `--db` | Custom DuckDB database path (optional) |
 | `--no-parquet` | Skip Parquet export (optional) |
 
