@@ -123,6 +123,9 @@ def ingest_data(
         for col in schema:
             print(f"  {col[0]}: {col[1]}")
 
+        # Create date dimension table
+        create_date_dimension(con)
+
         print(f"\nDatabase saved to: {db_path}")
 
         # Validate primary keys
@@ -136,6 +139,83 @@ def ingest_data(
         con.close()
 
 
+def create_date_dimension(con: duckdb.DuckDBPyConnection) -> None:
+    """
+    Create a date dimension table with dates from 2022-01-01 to 2040-12-31.
+
+    The table includes various date attributes useful for analytics:
+    - datekey: BIGINT in YYYYMMDD format (join key to fact.visitdatekey)
+    - Various date parts: year, quarter, month, week, day
+    - Day/month names
+    - Flags for weekends, month/quarter/year boundaries
+
+    Args:
+        con: Active DuckDB connection
+    """
+    print("\n--- Creating Date Dimension ---")
+
+    con.execute("""
+        CREATE OR REPLACE TABLE dim_date AS
+        WITH date_range AS (
+            SELECT UNNEST(generate_series(DATE '2022-01-01', DATE '2040-12-31', INTERVAL 1 DAY)) AS date
+        )
+        SELECT
+            -- Primary key (BIGINT in YYYYMMDD format for joining with fact.visitdatekey)
+            CAST(STRFTIME(date, '%Y%m%d') AS BIGINT) AS datekey,
+
+            -- Date value
+            date,
+
+            -- Year
+            YEAR(date) AS year,
+
+            -- Quarter
+            QUARTER(date) AS quarter,
+            CONCAT('Q', QUARTER(date)) AS quarter_name,
+            CONCAT('Q', QUARTER(date), ' ', YEAR(date)) AS year_quarter,
+
+            -- Month
+            MONTH(date) AS month,
+            STRFTIME(date, '%B') AS month_name,
+            STRFTIME(date, '%b') AS month_short,
+            CONCAT(YEAR(date), '-', LPAD(CAST(MONTH(date) AS VARCHAR), 2, '0')) AS year_month,
+
+            -- Week (ISO week number)
+            WEEKOFYEAR(date) AS week_number,
+            CONCAT(ISOYEAR(date), '-W', LPAD(CAST(WEEKOFYEAR(date) AS VARCHAR), 2, '0')) AS year_week,
+
+            -- Day
+            DAY(date) AS day_of_month,
+            DAYOFYEAR(date) AS day_of_year,
+            ISODOW(date) AS day_of_week,  -- 1=Monday, 7=Sunday
+            STRFTIME(date, '%A') AS day_name,
+            STRFTIME(date, '%a') AS day_short,
+
+            -- Flags
+            CASE WHEN ISODOW(date) IN (6, 7) THEN TRUE ELSE FALSE END AS is_weekend,
+            CASE WHEN DAY(date) = 1 THEN TRUE ELSE FALSE END AS is_month_start,
+            CASE WHEN date = LAST_DAY(date) THEN TRUE ELSE FALSE END AS is_month_end,
+            CASE WHEN MONTH(date) IN (1, 4, 7, 10) AND DAY(date) = 1 THEN TRUE ELSE FALSE END AS is_quarter_start,
+            CASE WHEN MONTH(date) IN (3, 6, 9, 12) AND date = LAST_DAY(date) THEN TRUE ELSE FALSE END AS is_quarter_end,
+            CASE WHEN MONTH(date) = 1 AND DAY(date) = 1 THEN TRUE ELSE FALSE END AS is_year_start,
+            CASE WHEN MONTH(date) = 12 AND DAY(date) = 31 THEN TRUE ELSE FALSE END AS is_year_end
+
+        FROM date_range
+        ORDER BY date
+    """)
+
+    date_count = con.execute("SELECT COUNT(*) FROM dim_date").fetchone()[0]
+    min_date = con.execute("SELECT MIN(date) FROM dim_date").fetchone()[0]
+    max_date = con.execute("SELECT MAX(date) FROM dim_date").fetchone()[0]
+    print(f"Created 'dim_date' table with {date_count:,} rows ({min_date} to {max_date})")
+
+    # Show schema
+    print("\n--- Date Dimension Schema ---")
+    schema = con.execute("DESCRIBE dim_date").fetchall()
+    for col in schema:
+        print(f"  {col[0]}: {col[1]}")
+
+
 def export_to_parquet(con: duckdb.DuckDBPyConnection) -> None:
     """
     Export tables to Parquet format for Power BI reporting.
@@ -143,6 +223,7 @@ def export_to_parquet(con: duckdb.DuckDBPyConnection) -> None:
     Creates:
         - fact.parquet: The fact table
         - page_inventory.parquet: The page inventory dimension
+        - dim_date.parquet: The date dimension table
         - analytics_combined.parquet: Denormalized join of fact + page_inventory
 
     Args:
@@ -159,6 +240,11 @@ def export_to_parquet(con: duckdb.DuckDBPyConnection) -> None:
     inventory_parquet = OUTPUT_PARQUET_DIR / "page_inventory.parquet"
     con.execute(f"COPY page_inventory TO '{inventory_parquet}' (FORMAT PARQUET, COMPRESSION SNAPPY)")
     print(f"Exported page inventory to: {inventory_parquet}")
+
+    # Export date dimension
+    date_parquet = OUTPUT_PARQUET_DIR / "dim_date.parquet"
+    con.execute(f"COPY dim_date TO '{date_parquet}' (FORMAT PARQUET, COMPRESSION SNAPPY)")
+    print(f"Exported date dimension to: {date_parquet}")
 
     # Export combined/denormalized view for simpler Power BI reporting
     combined_parquet = OUTPUT_PARQUET_DIR / "analytics_combined.parquet"

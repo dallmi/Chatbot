@@ -16,6 +16,7 @@ Chatbot/
 │   └── parquet/           # Parquet files for Power BI (auto-generated)
 │       ├── fact.parquet
 │       ├── page_inventory.parquet
+│       ├── dim_date.parquet
 │       └── analytics_combined.parquet
 ├── notebooks/
 │   └── analysis.ipynb     # Jupyter notebook for analysis
@@ -98,6 +99,37 @@ The page inventory/dimension table. Expected columns:
 | targetRegion | Target region |
 | targetOrganization | Target organization |
 | cnt | Count |
+
+### dim_date (Auto-generated)
+
+A date dimension table is automatically generated during ingestion (2022-01-01 to 2040-12-31). Join to fact table via `datekey = visitdatekey`.
+
+| Column | Description |
+|--------|-------------|
+| datekey | BIGINT in YYYYMMDD format (join key to fact.visitdatekey) |
+| date | DATE value |
+| year | Year (2022-2040) |
+| quarter | Quarter number (1-4) |
+| quarter_name | Quarter name (Q1, Q2, Q3, Q4) |
+| year_quarter | Year and quarter (e.g., "Q1 2025") |
+| month | Month number (1-12) |
+| month_name | Full month name (January, February, etc.) |
+| month_short | Abbreviated month name (Jan, Feb, etc.) |
+| year_month | Year-month string (e.g., "2025-01") |
+| week_number | ISO week number (1-53) |
+| year_week | Year-week string (e.g., "2025-W01") |
+| day_of_month | Day of month (1-31) |
+| day_of_year | Day of year (1-366) |
+| day_of_week | ISO day of week (1=Monday, 7=Sunday) |
+| day_name | Full day name (Monday, Tuesday, etc.) |
+| day_short | Abbreviated day name (Mon, Tue, etc.) |
+| is_weekend | TRUE if Saturday or Sunday |
+| is_month_start | TRUE if first day of month |
+| is_month_end | TRUE if last day of month |
+| is_quarter_start | TRUE if first day of quarter |
+| is_quarter_end | TRUE if last day of quarter |
+| is_year_start | TRUE if January 1st |
+| is_year_end | TRUE if December 31st |
 
 ## Running the Pipeline
 
