@@ -144,6 +144,14 @@ This uses the default paths:
 - `input/fact.csv`
 - `input/page_inventory.csv`
 
+**Incremental Loading (default):**
+
+By default, the script uses incremental loading to retain historical data:
+- **Fact table**: Keeps data outside the CSV date range, replaces overlapping dates
+- **Page inventory**: Updates existing pages, adds new ones, keeps historical pages
+
+This is useful when your source exports a rolling 90-day window - historical data beyond that window is preserved in DuckDB.
+
 **Options:**
 
 | Flag | Description |
@@ -152,6 +160,7 @@ This uses the default paths:
 | `--inventory` | Path to page inventory CSV (default: `input/page_inventory.csv`) |
 | `--db` | Custom DuckDB database path (optional) |
 | `--no-parquet` | Skip Parquet export (optional) |
+| `--full-refresh` | Replace all data instead of incremental merge |
 
 **Output:**
 - Creates `output/db/analytics.duckdb` - DuckDB database

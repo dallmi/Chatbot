@@ -4,6 +4,12 @@ Intranet Analytics Data Ingestion Script
 This script loads the fact table and page inventory CSV files into a DuckDB database
 and exports them to Parquet format for Power BI reporting.
 
+Features:
+- Incremental loading (default): Retains historical data beyond the source's rolling window
+  - Fact table: Keeps data outside CSV date range, replaces overlapping dates
+  - Page inventory: Upserts based on marketingpageid
+- Full refresh mode (--full-refresh): Replaces all data
+
 The fact table columns are cleaned by removing the 'fact_' prefix.
 
 Project structure:
@@ -33,16 +39,24 @@ def ingest_data(
     fact_csv_path: str | Path,
     page_inventory_csv_path: str | Path,
     db_path: str | Path = DEFAULT_DB_PATH,
-    export_parquet: bool = True
+    export_parquet: bool = True,
+    full_refresh: bool = False
 ) -> None:
     """
     Ingest fact table and page inventory CSVs into DuckDB.
+
+    By default, uses incremental loading:
+    - Fact table: Keeps historical data outside the CSV date range, replaces overlapping dates
+    - Page inventory: Upserts based on marketingpageid (updates existing, adds new, keeps historical)
+
+    Use full_refresh=True to replace all data (original behavior).
 
     Args:
         fact_csv_path: Path to the fact table CSV file
         page_inventory_csv_path: Path to the page inventory CSV file
         db_path: Path for the DuckDB database file
         export_parquet: Whether to export tables to Parquet format
+        full_refresh: If True, replace all data; if False, use incremental merge
     """
     # Ensure paths are absolute
     fact_csv_path = Path(fact_csv_path).resolve()
@@ -59,58 +73,207 @@ def ingest_data(
     try:
         # Ingest fact table
         print(f"Loading fact table from: {fact_csv_path}")
-        con.execute(f"""
-            CREATE OR REPLACE TABLE fact AS
-            SELECT
-                fact_visitdatekey AS visitdatekey,
-                fact_referrerapplicationid AS referrerapplicationid,
-                fact_marketingPageId AS marketingpageid,
-                fact_views AS views,
-                fact_viewingcontactid AS viewingcontactid,
-                fact_flag AS flag,
-                fact_visits AS visits,
-                fact_durationsum AS durationsum,
-                fact_durationavg AS durationavg,
-                fact_comments AS comments,
-                fact_marketingPageIdliked AS marketingpageidliked
-            FROM read_csv('{fact_csv_path}', auto_detect=true)
-        """)
+
+        if full_refresh:
+            # Full refresh: replace all data
+            print("  Mode: FULL REFRESH (replacing all data)")
+            con.execute(f"""
+                CREATE OR REPLACE TABLE fact AS
+                SELECT
+                    fact_visitdatekey AS visitdatekey,
+                    fact_referrerapplicationid AS referrerapplicationid,
+                    fact_marketingPageId AS marketingpageid,
+                    fact_views AS views,
+                    fact_viewingcontactid AS viewingcontactid,
+                    fact_flag AS flag,
+                    fact_visits AS visits,
+                    fact_durationsum AS durationsum,
+                    fact_durationavg AS durationavg,
+                    fact_comments AS comments,
+                    fact_marketingPageIdliked AS marketingpageidliked
+                FROM read_csv('{fact_csv_path}', auto_detect=true)
+            """)
+        else:
+            # Incremental: keep historical, replace overlapping date range
+            print("  Mode: INCREMENTAL (keeping historical data)")
+
+            # Create table if it doesn't exist
+            con.execute("""
+                CREATE TABLE IF NOT EXISTS fact (
+                    visitdatekey BIGINT,
+                    referrerapplicationid VARCHAR,
+                    marketingpageid VARCHAR,
+                    views BIGINT,
+                    viewingcontactid VARCHAR,
+                    flag VARCHAR,
+                    visits BIGINT,
+                    durationsum DOUBLE,
+                    durationavg DOUBLE,
+                    comments BIGINT,
+                    marketingpageidliked VARCHAR
+                )
+            """)
+
+            # Load CSV into staging table
+            con.execute(f"""
+                CREATE OR REPLACE TEMP TABLE fact_staging AS
+                SELECT
+                    fact_visitdatekey AS visitdatekey,
+                    fact_referrerapplicationid AS referrerapplicationid,
+                    fact_marketingPageId AS marketingpageid,
+                    fact_views AS views,
+                    fact_viewingcontactid AS viewingcontactid,
+                    fact_flag AS flag,
+                    fact_visits AS visits,
+                    fact_durationsum AS durationsum,
+                    fact_durationavg AS durationavg,
+                    fact_comments AS comments,
+                    fact_marketingPageIdliked AS marketingpageidliked
+                FROM read_csv('{fact_csv_path}', auto_detect=true)
+            """)
+
+            # Get date range from staging
+            date_range = con.execute("""
+                SELECT MIN(visitdatekey) as min_date, MAX(visitdatekey) as max_date
+                FROM fact_staging
+            """).fetchone()
+            min_date, max_date = date_range
+            print(f"  CSV date range: {min_date} to {max_date}")
+
+            # Count rows before
+            before_count = con.execute("SELECT COUNT(*) FROM fact").fetchone()[0]
+
+            # Delete overlapping date range
+            deleted = con.execute(f"""
+                DELETE FROM fact
+                WHERE visitdatekey >= {min_date} AND visitdatekey <= {max_date}
+            """).fetchone()
+
+            # Insert all from staging
+            con.execute("INSERT INTO fact SELECT * FROM fact_staging")
+
+            # Drop staging table
+            con.execute("DROP TABLE fact_staging")
+
+            staging_count = con.execute(f"SELECT COUNT(*) FROM read_csv('{fact_csv_path}', auto_detect=true)").fetchone()[0]
+            print(f"  Rows before: {before_count:,}, CSV rows: {staging_count:,}")
 
         fact_count = con.execute("SELECT COUNT(*) FROM fact").fetchone()[0]
-        print(f"Loaded {fact_count:,} rows into 'fact' table")
+        print(f"  Total rows in 'fact' table: {fact_count:,}")
 
         # Ingest page inventory with cleaned column names
-        print(f"Loading page inventory from: {page_inventory_csv_path}")
-        con.execute(f"""
-            CREATE OR REPLACE TABLE page_inventory AS
-            SELECT
-                websitename,
-                websiteurl,
-                owningbusinessunit,
-                pagename,
-                fullpageurl,
-                sourcesystempageid,
-                marketingpageid,
-                theme,
-                topic,
-                pageurl,
-                exclude,
-                "Site name" AS sitename,
-                "theme - Copy" AS theme_normalized,
-                "topic - Copy" AS topic_normalized,
-                template,
-                contentType AS contenttype,
-                pageLanguage AS pagelanguage,
-                newsCategory AS newscategory,
-                targetRegion AS targetregion,
-                targetOrganization AS targetorganization,
-                cnt
-            FROM read_csv('{page_inventory_csv_path}', auto_detect=true)
-            WHERE marketingpageid != 'Unknown'
-        """)
+        print(f"\nLoading page inventory from: {page_inventory_csv_path}")
+
+        if full_refresh:
+            # Full refresh: replace all data
+            print("  Mode: FULL REFRESH (replacing all data)")
+            con.execute(f"""
+                CREATE OR REPLACE TABLE page_inventory AS
+                SELECT
+                    websitename,
+                    websiteurl,
+                    owningbusinessunit,
+                    pagename,
+                    fullpageurl,
+                    sourcesystempageid,
+                    marketingpageid,
+                    theme,
+                    topic,
+                    pageurl,
+                    exclude,
+                    "Site name" AS sitename,
+                    "theme - Copy" AS theme_normalized,
+                    "topic - Copy" AS topic_normalized,
+                    template,
+                    contentType AS contenttype,
+                    pageLanguage AS pagelanguage,
+                    newsCategory AS newscategory,
+                    targetRegion AS targetregion,
+                    targetOrganization AS targetorganization,
+                    cnt
+                FROM read_csv('{page_inventory_csv_path}', auto_detect=true)
+                WHERE marketingpageid != 'Unknown'
+            """)
+        else:
+            # Incremental: upsert based on marketingpageid
+            print("  Mode: INCREMENTAL (upsert by marketingpageid)")
+
+            # Create table if it doesn't exist
+            con.execute("""
+                CREATE TABLE IF NOT EXISTS page_inventory (
+                    websitename VARCHAR,
+                    websiteurl VARCHAR,
+                    owningbusinessunit VARCHAR,
+                    pagename VARCHAR,
+                    fullpageurl VARCHAR,
+                    sourcesystempageid VARCHAR,
+                    marketingpageid VARCHAR,
+                    theme VARCHAR,
+                    topic VARCHAR,
+                    pageurl VARCHAR,
+                    exclude VARCHAR,
+                    sitename VARCHAR,
+                    theme_normalized VARCHAR,
+                    topic_normalized VARCHAR,
+                    template VARCHAR,
+                    contenttype VARCHAR,
+                    pagelanguage VARCHAR,
+                    newscategory VARCHAR,
+                    targetregion VARCHAR,
+                    targetorganization VARCHAR,
+                    cnt BIGINT
+                )
+            """)
+
+            # Load CSV into staging table
+            con.execute(f"""
+                CREATE OR REPLACE TEMP TABLE page_inventory_staging AS
+                SELECT
+                    websitename,
+                    websiteurl,
+                    owningbusinessunit,
+                    pagename,
+                    fullpageurl,
+                    sourcesystempageid,
+                    marketingpageid,
+                    theme,
+                    topic,
+                    pageurl,
+                    exclude,
+                    "Site name" AS sitename,
+                    "theme - Copy" AS theme_normalized,
+                    "topic - Copy" AS topic_normalized,
+                    template,
+                    contentType AS contenttype,
+                    pageLanguage AS pagelanguage,
+                    newsCategory AS newscategory,
+                    targetRegion AS targetregion,
+                    targetOrganization AS targetorganization,
+                    cnt
+                FROM read_csv('{page_inventory_csv_path}', auto_detect=true)
+                WHERE marketingpageid != 'Unknown'
+            """)
+
+            # Count rows before
+            before_count = con.execute("SELECT COUNT(*) FROM page_inventory").fetchone()[0]
+            staging_count = con.execute("SELECT COUNT(*) FROM page_inventory_staging").fetchone()[0]
+
+            # Delete pages that exist in staging (will be re-inserted with fresh values)
+            con.execute("""
+                DELETE FROM page_inventory
+                WHERE marketingpageid IN (SELECT marketingpageid FROM page_inventory_staging)
+            """)
+
+            # Insert all from staging
+            con.execute("INSERT INTO page_inventory SELECT * FROM page_inventory_staging")
+
+            # Drop staging table
+            con.execute("DROP TABLE page_inventory_staging")
+
+            print(f"  Rows before: {before_count:,}, CSV rows: {staging_count:,}")
 
         inventory_count = con.execute("SELECT COUNT(*) FROM page_inventory").fetchone()[0]
-        print(f"Loaded {inventory_count:,} rows into 'page_inventory' table")
+        print(f"  Total rows in 'page_inventory' table: {inventory_count:,}")
 
         # Show schema info
         print("\n--- Fact Table Schema ---")
@@ -360,8 +523,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Example usage:
-  python ingest_data.py                    # Uses default paths
+  python ingest_data.py                    # Incremental load (default)
+  python ingest_data.py --full-refresh     # Replace all data
   python ingest_data.py --fact custom.csv  # Override fact file path
+
+Incremental mode (default):
+  - Fact table: Keeps historical data, replaces dates within CSV range
+  - Page inventory: Updates existing pages, adds new, keeps historical
+
+Full refresh mode (--full-refresh):
+  - Replaces all data with CSV contents
 
 Default paths:
   Fact CSV:          {DEFAULT_FACT_PATH}
@@ -390,6 +561,11 @@ Default paths:
         action="store_true",
         help="Skip Parquet export"
     )
+    parser.add_argument(
+        "--full-refresh",
+        action="store_true",
+        help="Replace all data instead of incremental merge (default: incremental)"
+    )
 
     args = parser.parse_args()
 
@@ -397,7 +573,8 @@ Default paths:
         args.fact,
         args.inventory,
         args.db,
-        export_parquet=not args.no_parquet
+        export_parquet=not args.no_parquet,
+        full_refresh=args.full_refresh
     )
 
 
