@@ -13,30 +13,21 @@ Chatbot/
 │   └── employee_contact.csv # Employee dimension (optional)
 ├── output/
 │   ├── db/                # DuckDB database files (auto-generated)
-│   │   ├── analytics.duckdb      # Detailed data (large)
-│   │   └── analytics_agg.duckdb  # Aggregated data (small)
-│   ├── parquet/           # Detailed Parquet files
-│   │   ├── fact.parquet
-│   │   ├── page_inventory.parquet
-│   │   ├── employee_contact.parquet  # If employee_contact.csv provided
-│   │   └── dim_date.parquet
-│   └── parquet_agg/       # Aggregated Parquet for Power BI (recommended)
-│       ├── fact_daily.parquet
-│       ├── fact_daily_website.parquet
-│       ├── fact_daily_employee.parquet  # If employee_contact.csv provided
-│       ├── fact_monthly.parquet
-│       ├── dim_date.parquet
+│   │   └── analytics.duckdb      # Full detailed data
+│   └── parquet/           # Parquet files for Power BI
+│       ├── fact.parquet
 │       ├── page_inventory.parquet
-│       └── employee_contact.parquet  # If employee_contact.csv provided
+│       ├── employee_contact.parquet  # If employee_contact.csv provided
+│       └── dim_date.parquet
 ├── notebooks/
-│   ├── analysis.ipynb     # Detailed data analysis
-│   └── analysis_agg.ipynb # Aggregated data analysis
+│   └── analysis.ipynb     # Data analysis notebook
 ├── scripts/
-│   ├── ingest_data.py     # Data ingestion script
-│   └── create_aggregations.py  # Aggregation script
+│   └── ingest_data.py     # Data ingestion script
 ├── reporting/             # For exported reports (CSV, Excel, PDF)
 ├── config/                # Configuration files (if needed)
 ├── requirements.txt       # Python dependencies
+├── SCHEMA.md              # Data schema documentation (for chatbot)
+├── SAMPLE_QUESTIONS.md    # Sample stakeholder questions
 └── README.md
 ```
 
@@ -180,6 +171,7 @@ python scripts/ingest_data.py
 This uses the default paths:
 - `input/fact.csv`
 - `input/page_inventory.csv`
+- `input/employee_contact.csv` (optional)
 
 **Incremental Loading (default):**
 
@@ -204,38 +196,12 @@ This is useful when your source exports a rolling 90-day window - historical dat
 - Creates `output/parquet/*.parquet` - Parquet files for Power BI
 - Validates primary keys and reports any issues
 
-### Step 1b: Create Aggregations (Recommended for Power BI)
-
-The detailed fact table can be large (1GB+ for 90 days). For Power BI reporting, create pre-aggregated tables:
-
-```bash
-python scripts/create_aggregations.py
-```
-
-This reads from the detailed database and creates:
-- `output/db/analytics_agg.duckdb` - Aggregated database (~50MB)
-- `output/parquet_agg/*.parquet` - Aggregated Parquet files (~5MB total)
-
-**Aggregation tables:**
-
-| Table | Grain | Description |
-|-------|-------|-------------|
-| `fact_daily` | Date + Page | Daily metrics per page (UV, views, likes, etc.) |
-| `fact_daily_website` | Date + Website | Daily metrics per website |
-| `fact_monthly` | Month + Page | Monthly metrics per page |
-
-**Note:** UV in aggregated tables is pre-calculated at the grain level. For true cross-period UV or employee analysis with flexible date ranges, use the detailed database.
-
 ### Step 2: Analyze Data in Jupyter
 
-Start Jupyter and open an analysis notebook:
+Start Jupyter and open the analysis notebook:
 
 ```bash
-# Detailed data analysis (large dataset)
 jupyter notebook notebooks/analysis.ipynb
-
-# Aggregated data analysis (faster, smaller)
-jupyter notebook notebooks/analysis_agg.ipynb
 ```
 
 Or using JupyterLab:
@@ -264,26 +230,19 @@ Then run all cells to see filtered results.
 
 ### Step 4: Use Parquet Files in Power BI
 
-**Recommended: Use aggregated files** from `output/parquet_agg/` (much smaller, faster):
+Import files from `output/parquet/`:
 
 1. Open Power BI Desktop
 2. Get Data > Parquet
-3. Import files from `output/parquet_agg/`:
-   - `fact_daily.parquet` or `fact_daily_website.parquet` - Pre-aggregated metrics
-   - `fact_monthly.parquet` - Monthly aggregates
+3. Import files:
+   - `fact.parquet` - Fact table
    - `page_inventory.parquet` - Page dimension
+   - `employee_contact.parquet` - Employee dimension (if available)
    - `dim_date.parquet` - Date dimension
-4. Create relationships as needed (date fields are already included in aggregates)
-
-**Alternative: Use detailed files** from `output/parquet/` (large, row-level detail):
-
-1. Import from `output/parquet/`:
-   - `fact.parquet` - Detailed fact table (can be 300MB+)
-   - `page_inventory.parquet` - Page dimension
-   - `dim_date.parquet` - Date dimension
-2. Create relationships (star schema):
+4. Create relationships (star schema):
    - `fact.marketingpageid` → `page_inventory.marketingpageid`
    - `fact.visitdatekey` → `dim_date.datekey`
+   - `fact.viewingcontactid` → `employee_contact.contactid`
 
 ## Notebook Analysis Sections
 
@@ -299,10 +258,11 @@ The Jupyter notebook includes:
 | 6. Overall Metrics | Engagement rates, views per visitor |
 | 7. Quick Filters | Helper cells to search websites/URLs |
 | 8. Visualizations | Charts for rows per website, UV trends, top pages, engagement |
+| 9. Employee Analysis | UV by region, division, top visitors (if employee_contact available) |
 
 ## Key Metrics
 
-- **UV (Unique Visitors)**: `COUNT(DISTINCT viewingcontactid)` - calculated at query time, not pre-aggregated
+- **UV (Unique Visitors)**: `COUNT(DISTINCT viewingcontactid)` - calculated at query time for full flexibility
 - **Likes**: `COUNT` of rows where `marketingpageidliked` is not null/empty (the field contains the PageID that was liked)
 - **Engagement**: `likes + comments`
 - **Engagement Rate**: `(likes + comments) / views * 100`
