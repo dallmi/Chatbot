@@ -292,23 +292,23 @@ def ingest_data(
                 con.execute(f"""
                     CREATE OR REPLACE TABLE employee_contact AS
                     SELECT
-                        contactId AS contactid,
-                        employeebusinessdivision,
-                        employeeCategory AS employeecategory,
-                        employeeClass AS employeeclass,
-                        employeeCluster AS employeecluster,
-                        employeeFamily AS employeefamily,
-                        employeeFunction AS employeefunction,
-                        employeeGCRSCountry AS employeegcrscountry,
-                        employeeRank AS employeerank,
-                        employeeregion,
-                        employeeRole AS employeerole,
-                        employeeWorkCountry AS employeeworkcountry,
-                        OU_LVL_1 AS ou_lvl_1,
-                        OU_LVL_2 AS ou_lvl_2,
-                        OU_LVL_3 AS ou_lvl_3,
-                        OU_LVL_4 AS ou_lvl_4,
-                        OU_LVL_5 AS ou_lvl_5
+                        "employee_contact[contactID]" AS contactid,
+                        "employee_contact[employeebusinessdivision]" AS employeebusinessdivision,
+                        "employee_contact[employeeCategory]" AS employeecategory,
+                        "employee_contact[employeeClass]" AS employeeclass,
+                        "employee_contact[employeeCluster]" AS employeecluster,
+                        "employee_contact[employeeFamily]" AS employeefamily,
+                        "employee_contact[employeeFunction]" AS employeefunction,
+                        "employee_contact[employeeGCRSCountry]" AS employeegcrscountry,
+                        "employee_contact[employeeRank]" AS employeerank,
+                        "employee_contact[employeeregion]" AS employeeregion,
+                        "employee_contact[employeeRole]" AS employeerole,
+                        "employee_contact[employeeWorkCountry]" AS employeeworkcountry,
+                        "employee_contact[OU_LVL_1]" AS ou_lvl_1,
+                        "employee_contact[OU_LVL_2]" AS ou_lvl_2,
+                        "employee_contact[OU_LVL_3]" AS ou_lvl_3,
+                        "employee_contact[OU_LVL_4]" AS ou_lvl_4,
+                        "employee_contact[OU_LVL_5]" AS ou_lvl_5
                     FROM read_csv('{employee_contact_csv_path}', auto_detect=true)
                 """)
             else:
@@ -342,23 +342,23 @@ def ingest_data(
                 con.execute(f"""
                     CREATE OR REPLACE TEMP TABLE employee_contact_staging AS
                     SELECT
-                        contactId AS contactid,
-                        employeebusinessdivision,
-                        employeeCategory AS employeecategory,
-                        employeeClass AS employeeclass,
-                        employeeCluster AS employeecluster,
-                        employeeFamily AS employeefamily,
-                        employeeFunction AS employeefunction,
-                        employeeGCRSCountry AS employeegcrscountry,
-                        employeeRank AS employeerank,
-                        employeeregion,
-                        employeeRole AS employeerole,
-                        employeeWorkCountry AS employeeworkcountry,
-                        OU_LVL_1 AS ou_lvl_1,
-                        OU_LVL_2 AS ou_lvl_2,
-                        OU_LVL_3 AS ou_lvl_3,
-                        OU_LVL_4 AS ou_lvl_4,
-                        OU_LVL_5 AS ou_lvl_5
+                        "employee_contact[contactID]" AS contactid,
+                        "employee_contact[employeebusinessdivision]" AS employeebusinessdivision,
+                        "employee_contact[employeeCategory]" AS employeecategory,
+                        "employee_contact[employeeClass]" AS employeeclass,
+                        "employee_contact[employeeCluster]" AS employeecluster,
+                        "employee_contact[employeeFamily]" AS employeefamily,
+                        "employee_contact[employeeFunction]" AS employeefunction,
+                        "employee_contact[employeeGCRSCountry]" AS employeegcrscountry,
+                        "employee_contact[employeeRank]" AS employeerank,
+                        "employee_contact[employeeregion]" AS employeeregion,
+                        "employee_contact[employeeRole]" AS employeerole,
+                        "employee_contact[employeeWorkCountry]" AS employeeworkcountry,
+                        "employee_contact[OU_LVL_1]" AS ou_lvl_1,
+                        "employee_contact[OU_LVL_2]" AS ou_lvl_2,
+                        "employee_contact[OU_LVL_3]" AS ou_lvl_3,
+                        "employee_contact[OU_LVL_4]" AS ou_lvl_4,
+                        "employee_contact[OU_LVL_5]" AS ou_lvl_5
                     FROM read_csv('{employee_contact_csv_path}', auto_detect=true)
                 """)
 
