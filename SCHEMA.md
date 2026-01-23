@@ -58,16 +58,16 @@ Dimension table containing metadata about each page in the intranet.
 | `fullpageurl` | VARCHAR | **Recommended.** Complete URL of the page | `https://intranet.company.com/news/article-123` |
 | `sourcesystempageid` | VARCHAR | Page ID from the source system | - |
 | `pageurl` | VARCHAR | Page URL (use `fullpageurl` instead) | - |
-| `theme` | VARCHAR | Content theme/category | `News`, `Policy`, `Event` |
-| `topic` | VARCHAR | Content topic | `Company Updates`, `Benefits`, `Training` |
-| `theme_normalized` | VARCHAR | Standardized/cleaned version of theme | `News`, `Policy`, `Event` |
-| `topic_normalized` | VARCHAR | Standardized/cleaned version of topic | `Company Updates`, `Benefits`, `Training` |
+| `theme` | VARCHAR | Content theme/category | `Who-We-Are`, `Financial-services`, `Technology`, `Business-Environment`, `Employee-Relations`, `Culture`, `Careers`, `Education` |
+| `topic` | VARCHAR | Content topic | `Intellectual Capital`, `Products`, `Client Experience`, `Collaboration`, `Client Centricity`, `Employee Benefits`, `Financials`, `Our Offering`, `Business Support`, `Digitalization` |
+| `theme_normalized` | VARCHAR | Standardized/cleaned version of theme | Same as `theme` but standardized |
+| `topic_normalized` | VARCHAR | Standardized/cleaned version of topic | Same as `topic` but standardized |
 | `template` | VARCHAR | Page template used | `Article`, `Landing Page`, `Document` |
-| `contenttype` | VARCHAR | Type of content | `News Article`, `Policy Document`, `Video` |
+| `contenttype` | VARCHAR | Type of content | `About Us`, `Overview Page`, `General Information`, `Service offer`, `Product page`, `Instructions`, `Homepage`, `Application`, `Article`, `Microsite` |
 | `pagelanguage` | VARCHAR | Language of the page | `en`, `de`, `fr` |
-| `newscategory` | VARCHAR | Category for news articles | `Corporate`, `Local`, `Industry` |
+| `newscategory` | VARCHAR | Category for news articles | `Business updates`, `Business environment`, `Operational`, `Employee benefits`, `Strategy`, `Culture`, `Thought leadership`, `Brand`, `Digital`, `Our People` |
 | `targetregion` | VARCHAR | Intended geographic audience | `Global`, `EMEA`, `Americas`, `APAC` |
-| `targetorganization` | VARCHAR | Intended organizational audience | `All Employees`, `Sales`, `Engineering` |
+| `targetorganization` | VARCHAR | Intended organizational audience | `Group Functions`, `Chief of Staff`, `Asset Management`, `Global Wealth Management`, `Group Compliance`, `Personal Banking` |
 | `sitename` | VARCHAR | Alternative site name field | - |
 | `exclude` | VARCHAR | Exclusion flag (usage unclear) | - |
 | `cnt` | BIGINT | Count field (usage unclear) | - |
